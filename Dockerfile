@@ -1,16 +1,30 @@
-FROM ubuntu:latest AS build
+# Stage 1: Build do projeto com Maven
+FROM maven:3.9.3-eclipse-temurin-17 AS build
 
-RUN apt-get update
-RUN apt-get install openjdk-17-jdk -y
-COPY . .
+WORKDIR /app
 
-RUN apt-get install maven -y
-RUN mvn clean install
+# Copia apenas o pom.xml primeiro para aproveitar cache do Docker
+COPY pom.xml .
 
+# Baixa dependências do Maven
+RUN mvn dependency:go-offline
+
+# Copia o código fonte
+COPY src ./src
+
+# Compila o projeto e gera o JAR
+RUN mvn clean package -DskipTests
+
+# Stage 2: Imagem final mais leve
 FROM openjdk:17-jdk-slim
 
+WORKDIR /app
+
+# Porta que a aplicação vai usar no Render
 EXPOSE 8083
 
-COPY --from=build primeiro-exemplo/target/primeiro-exemplo-0.0.1-SNAPSHOT.jar app.jar
+# Copia o jar do stage de build
+COPY --from=build /app/target/*.jar app.jar
 
-ENTRYPOINT [ "java", "-jar", "app.jar" ]
+# Comando para rodar a aplicação
+ENTRYPOINT ["java", "-jar", "app.jar"]
